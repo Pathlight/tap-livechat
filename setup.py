@@ -19,7 +19,7 @@ setup(
     tap-livechat=tap_livechat:main
     """,
     packages=["tap_livechat"],
-    package_data = {
+    package_data={
         "schemas": ["tap_livechat/schemas/*.json"]
     },
     include_package_data=True,

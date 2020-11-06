@@ -1,0 +1,60 @@
+{
+    "type": "object",
+    "properties": {
+        "type": {
+            "type": ["null", "string"]
+        },
+        "id": {
+            "type": "string"
+        },
+        "visitor_id": {
+            "type": ["null", "string"]
+        },
+        "agents": {
+            "type": "array",
+            "items": {
+                "type": ["null", "object"],
+                "additionalProperties": false,
+                "properties": {
+                    "display_name": {
+                        "type": ["null", "string"]
+                    },
+                    "email": {
+                        "type": ["null", "string"]
+                    }
+                }
+            }
+        },
+        "rate": {
+            "type": ["null", "string"]
+        },
+        "duration": {
+            "type": ["null", "integer"]
+        },
+        "started": {
+            "type": ["null", "string"]
+        },
+        "custom_variables": {
+            "type": ["null", "string"]
+        },
+        "pending": {
+            "type": ["null", "boolean"]
+        },
+        "tags": {
+            "type": ["null", "array"]
+        },
+        "timezone": {
+            "type": ["null", "string"]
+        },
+        "email": {
+            "type": ["null", "string"]
+        },
+        "time": {
+            "type": ["null", "string"],
+            "forat": "date-time"
+        },
+        "message": {
+            "type": ["null", "string"]
+        }
+    }
+}

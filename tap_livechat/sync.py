@@ -1,8 +1,22 @@
 import singer
 from .client import Client
 import datetime
+import pytz
+
+from singer.utils import strftime as singer_strftime
+
 
 LOGGER = singer.get_logger()
+
+
+def transform_value(key, value):
+    timestamp_fields = set(['ended_timestamp', 'started_timestamp'])
+    if key in timestamp_fields:
+        value = datetime.datetime.utcfromtimestamp(value).replace(tzinfo=pytz.utc)
+        # reformat to use RFC3339 format
+        value = singer_strftime(value)
+
+    return value
 
 
 def sync_chats(client, stream, state):
@@ -16,21 +30,24 @@ def sync_chats(client, stream, state):
     curr_synced_thru = bookmark
 
     for row in client.paging_get('chats', date_from=bookmark, include_pending=0):
+        record = {}
+        for key, value in row.items():
+            record[key] = transform_value(key, value)
+
         # it's possible for a single chat to have multiple agents assigned
         # so we create one row per agent per ticket
         for agent in row.get('agents', []):
-            row['agent_email'] = agent['email']
-            singer.write_record(stream.tap_stream_id, row)
+            record['agent_email'] = agent['email']
+            singer.write_record(stream.tap_stream_id, record)
+
+        # missed chats don't have agents, and have different fields for time
         if row['type'] == 'missed_chat':
-            # missed chats don't have agents
-            row['agent_email'] = 'unassigned'
-            singer.write_record(stream.tap_stream_id, row)
+            record['agent_email'] = 'unassigned'
+            singer.write_record(stream.tap_stream_id, record)
             record_date = row.get('time')
-            record_date = record_date[:10]
         else:
-            record_date = row.get('ended_timestamp')
-            record_date = datetime.datetime.utcfromtimestamp(record_date)
-            record_date = datetime.datetime.strftime(record_date, '%Y-%m-%d')
+            record_date = record.get('ended_timestamp')
+        record_date = record_date[:10]
         curr_synced_thru = max(curr_synced_thru, record_date)
 
     if curr_synced_thru > bookmark:

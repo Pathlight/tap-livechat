@@ -25,6 +25,9 @@
                 }
             }
         },
+        "agent_email": {
+            "type": ["null", "string"]
+        },
         "rate": {
             "type": ["null", "string"]
         },

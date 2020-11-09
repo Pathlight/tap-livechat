@@ -16,8 +16,15 @@ def sync_chats(client, stream, state):
     curr_synced_thru = bookmark
 
     for row in client.paging_get('chats', date_from=bookmark, include_pending=0):
-        singer.write_record(stream.tap_stream_id, row)
+        # it's possible for a single chat to have multiple agents assigned
+        # so we create one row per agent per ticket
+        for agent in row.get('agents', []):
+            row['agent_email'] = agent['email']
+            singer.write_record(stream.tap_stream_id, row)
         if row['type'] == 'missed_chat':
+            # missed chats don't have agents
+            row['agent_email'] = 'unassigned'
+            singer.write_record(stream.tap_stream_id, row)
             record_date = row.get('time')
             record_date = record_date[:10]
         else:

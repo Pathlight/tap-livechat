@@ -33,7 +33,7 @@ def discover():
     streams = []
     for stream_id, schema in raw_schemas.items():
         # TODO: populate any metadata and stream's key properties here..
-        key_properties = ['id']
+        key_properties = ['id', 'agent_email']
         stream_metadata = metadata.get_standard_metadata(
             schema=schema.to_dict(),
             key_properties=key_properties,

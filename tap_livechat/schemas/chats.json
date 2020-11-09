@@ -21,6 +21,9 @@
                     },
                     "email": {
                         "type": ["null", "string"]
+                    },
+                    "ip": {
+                        "type": ["null", "string"]
                     }
                 }
             }
@@ -34,10 +37,24 @@
         "duration": {
             "type": ["null", "integer"]
         },
-        "started": {
+        "referrer": {
             "type": ["null", "string"]
         },
-        "custom_variables": {
+        "engagement": {
+            "type": ["null", "string"]
+        },
+        "started_timestamp": {
+            "type": ["null", "string"],
+            "format": "date-time"
+        },
+        "ended": {
+            "type": ["null", "string"]
+        },
+        "ended_timestamp": {
+            "type": ["null", "string"],
+            "format": "date-time"
+        },
+        "started": {
             "type": ["null", "string"]
         },
         "pending": {
@@ -54,7 +71,7 @@
         },
         "time": {
             "type": ["null", "string"],
-            "forat": "date-time"
+            "format": "date-time"
         },
         "message": {
             "type": ["null", "string"]

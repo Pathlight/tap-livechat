@@ -9,8 +9,8 @@ from singer.schema import Schema
 from .sync import sync
 
 
-REQUIRED_CONFIG_KEYS = ["start_date", "entity_id", "access_token"]
 LOGGER = singer.get_logger()
+REQUIRED_CONFIG_KEYS = ["start_date", "entity_id", "access_token"]
 
 
 def get_abs_path(path):

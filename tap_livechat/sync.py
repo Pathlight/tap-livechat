@@ -1,74 +1,34 @@
 import singer
-from .client import Client
-import datetime
-import pytz
-
-from singer.utils import strftime as singer_strftime
+import singer.metrics as metrics
 
 
 LOGGER = singer.get_logger()
 
 
-def transform_value(key, value):
-    timestamp_fields = set(['ended_timestamp', 'started_timestamp'])
-    if key in timestamp_fields:
-        value = datetime.datetime.utcfromtimestamp(value).replace(tzinfo=pytz.utc)
-        # reformat to use RFC3339 format
-        value = singer_strftime(value)
+def sync_stream(state, start_date, instance):
+    stream = instance.stream
 
-    return value
+    # If we have a bookmark, use it; otherwise use start_date & update bookmark with it
+    if (instance.replication_method == 'INCREMENTAL' and
+            not state.get('bookmarks', {}).get(stream.tap_stream_id, {}).get(instance.replication_key)):
+        singer.write_bookmark(state,
+                              stream.tap_stream_id,
+                              instance.replication_key,
+                              start_date)
 
+    parent_stream = stream
+    with metrics.record_counter(stream.tap_stream_id) as counter:
+        for (stream, record) in instance.sync(state):
+            # NB: Only count parent records in the case of sub-streams
+            if stream.tap_stream_id == parent_stream.tap_stream_id:
+                counter.increment()
 
-def sync_chats(client, stream, state):
-    singer.write_schema(
-        stream_name=stream.tap_stream_id,
-        schema=stream.schema.to_dict(),
-        key_properties=stream.key_properties,
-    )
-
-    bookmark = state['bookmarks']['chats']  # this is going to be a string
-    curr_synced_thru = bookmark
-
-    for row in client.paging_get('chats', date_from=bookmark, include_pending=0):
-        record = {}
-        for key, value in row.items():
-            record[key] = transform_value(key, value)
-
-        # it's possible for a single chat to have multiple agents assigned
-        # so we create one row per agent per ticket
-        for agent in row.get('agents', []):
-            record['agent_email'] = agent['email']
             singer.write_record(stream.tap_stream_id, record)
+            # NB: We will only write state at the end of a stream's sync:
+            #  We may find out that there exists a sync that takes too long and can never emit a bookmark
+            #  but we don't know if we can guarentee the order of emitted records.
 
-        # missed chats don't have agents, and have different fields for time
-        if row['type'] == 'missed_chat':
-            record['agent_email'] = 'unassigned'
-            singer.write_record(stream.tap_stream_id, record)
-            record_date = row.get('time')
-        else:
-            record_date = record.get('ended_timestamp')
-        record_date = record_date[:10]
-        curr_synced_thru = max(curr_synced_thru, record_date)
+        if instance.replication_method == "INCREMENTAL":
+            singer.write_state(state)
 
-    if curr_synced_thru > bookmark:
-        state['bookmarks']['chats'] = curr_synced_thru
-        singer.write_state(state)
-
-
-def sync(config, state, catalog):
-    """ Sync data from tap source """
-
-    client = Client(config)
-    if not state:
-        state['bookmarks'] = {
-            'chats': config['start_date']
-        }
-
-    # Loop over selected streams in catalog
-    for stream in catalog.get_selected_streams(state):
-        LOGGER.info("Syncing stream:" + stream.tap_stream_id)
-
-        if stream.tap_stream_id == 'chats':
-            sync_chats(client, stream, state)
-        else:
-            LOGGER.info(stream.tap_stream_id + "not implemented")
+        return counter.value

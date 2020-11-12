@@ -5,12 +5,16 @@ import singer
 from singer import utils, metadata
 from singer.catalog import Catalog, CatalogEntry
 from singer.schema import Schema
-
-from .sync import sync
+from tap_livechat.streams import STREAMS
+from tap_livechat.sync import sync_stream
+from tap_livechat.client import Client
 
 
 LOGGER = singer.get_logger()
 REQUIRED_CONFIG_KEYS = ["start_date", "entity_id", "access_token"]
+SUB_STREAMS = {
+    'chats': ['messages', 'events']
+}
 
 
 def get_abs_path(path):
@@ -59,6 +63,96 @@ def discover():
     return Catalog(streams)
 
 
+def stream_is_selected(mdata):
+    return mdata.get((), {}).get('selected', False)
+
+
+def get_selected_streams(catalog):
+    selected_stream_names = []
+    for stream in catalog.streams:
+        mdata = metadata.to_map(stream.metadata)
+        if stream_is_selected(mdata):
+            selected_stream_names.append(stream.tap_stream_id)
+    return selected_stream_names
+
+
+def get_sub_stream_names():
+    sub_stream_names = []
+    for parent_stream in SUB_STREAMS:
+        sub_stream_names.extend(SUB_STREAMS[parent_stream])
+    return sub_stream_names
+
+
+class DependencyException(Exception):
+    pass
+
+
+def validate_dependencies(selected_stream_ids):
+    errs = []
+    msg_tmpl = ("Unable to extract {0} data. "
+                "To receive {0} data, you also need to select {1}.")
+    for parent_stream_name in SUB_STREAMS:
+        sub_stream_names = SUB_STREAMS[parent_stream_name]
+        for sub_stream_name in sub_stream_names:
+            if sub_stream_name in selected_stream_ids and parent_stream_name not in selected_stream_ids:
+                errs.append(msg_tmpl.format(sub_stream_name, parent_stream_name))
+
+    if errs:
+        raise DependencyException(" ".join(errs))
+
+
+def populate_class_schemas(catalog, selected_stream_names):
+    for stream in catalog.streams:
+        if stream.tap_stream_id in selected_stream_names:
+            STREAMS[stream.tap_stream_id].stream = stream
+
+
+def do_sync(client, catalog, state, start_date):
+
+    selected_stream_names = get_selected_streams(catalog)
+    validate_dependencies(selected_stream_names)
+    populate_class_schemas(catalog, selected_stream_names)
+    all_sub_stream_names = get_sub_stream_names()
+
+    for stream in catalog.streams:
+        stream_name = stream.tap_stream_id
+        if stream_name not in selected_stream_names:
+            LOGGER.info("%s: Skipping - not selected", stream_name)
+            continue
+
+        singer.write_schema(
+            stream_name,
+            stream.schema.to_dict(),
+            stream.key_properties
+        )
+
+        sub_stream_names = SUB_STREAMS.get(stream_name)
+        if sub_stream_names:
+            for sub_stream_name in sub_stream_names:
+                if sub_stream_name not in selected_stream_names:
+                    continue
+                sub_instance = STREAMS[sub_stream_name]
+                sub_stream = STREAMS[sub_stream_name].stream
+                singer.write_schema(
+                    sub_stream.tap_stream_id,
+                    sub_stream.schema.to_dict(),
+                    sub_instance.key_properties
+                )
+
+        # parent stream will sync sub stream
+        if stream_name in all_sub_stream_names:
+            continue
+
+        LOGGER.info("%s: Starting sync", stream_name)
+        instance = STREAMS[stream_name](client, start_date)
+        counter_value = sync_stream(state, start_date, instance)
+        singer.write_state(state)
+        LOGGER.info("%s: Completed sync (%s rows)", stream_name, counter_value)
+
+    singer.write_state(state)
+    LOGGER.info("Finished sync")
+
+
 @utils.handle_top_exception(LOGGER)
 def main():
     # Parse command line arguments
@@ -74,7 +168,9 @@ def main():
             catalog = args.catalog
         else:
             catalog = discover()
-        sync(args.config, args.state, catalog)
+        start_date = args.config['start_date']
+        client = Client(args.config)
+        do_sync(client, catalog, args.state, start_date)
 
 
 if __name__ == "__main__":

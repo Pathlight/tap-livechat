@@ -1,0 +1,33 @@
+{
+    "type": "object",
+    "properties": {
+        "author_name": {
+            "type": ["null", "string"]
+        },
+        "text": {
+            "type": ["null", "string"]
+        },
+        "message_json": {
+            "type": ["null", "string"]
+        },
+        "date": {
+            "type": ["null", "string"]
+        },
+        "timestamp": {
+            "type": ["null", "string"],
+            "format": "date-time"
+        },
+        "agent_id": {
+            "type": ["null", "string"]
+        },
+        "user_type": {
+            "type": ["null", "string"]
+        },
+        "type": {
+            "type": ["null", "string"]
+        },
+        "event_id": {
+            "type": ["null", "string"]
+        }
+    }
+}

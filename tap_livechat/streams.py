@@ -98,7 +98,10 @@ class Messages(Stream):
     key_properties = ['event_id']
 
     def sync(self, chat):
-        for message in chat.get('messages'):
+        for m in chat.get('messages'):
+            message = {}
+            for key, value in m.items():
+                message[key] = transform_value(key, value)
             message = {
                 **message,
                 'chat_id': chat['id'],
@@ -114,7 +117,11 @@ class Events(Stream):
     key_properties = ['event_id']
 
     def sync(self, chat):
-        for event in chat.get('events'):
+        for e in chat.get('events'):
+            event = {}
+            for key, value in e.items():
+                event[key] = transform_value(key, value)
+
             event = {
                 **event,
                 'chat_id': chat['id'],

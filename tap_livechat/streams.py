@@ -11,12 +11,17 @@ SUB_STREAMS = {
     'chats': ['messages', 'events']
 }
 TIMESTAMP_FIELDS = set(['ended_timestamp', 'started_timestamp', 'timestamp'])
+STRING_DATES = set(['date', 'time'])
 
 
 def transform_value(key, value):
     if key in TIMESTAMP_FIELDS:
         value = datetime.datetime.utcfromtimestamp(value).replace(tzinfo=pytz.utc)
         # reformat to use RFC3339 format
+        value = singer_strftime(value)
+    elif key in STRING_DATES:
+        value = parser.parse(value)
+        value = value.replace(tzinfo=pytz.utc)
         value = singer_strftime(value)
 
     return value
@@ -55,9 +60,10 @@ class Chats(Stream):
             sync_thru = singer.get_bookmark(state, self.name, self.replication_key)
         except TypeError:
             sync_thru = self.start_date
+        sync_thru = transform_value('date', sync_thru)
 
-        sync_thru = max(sync_thru, self.start_date)
-        date_from = parser.parse(sync_thru)
+        curr_synced_thru = max(sync_thru, self.start_date)
+        date_from = parser.parse(curr_synced_thru)
 
         events_stream = Events(self.client)
         messages_stream = Messages(self.client)
@@ -77,7 +83,7 @@ class Chats(Stream):
             if row['type'] == 'missed_chat':
                 chat['agent_email'] = 'unassigned'
                 yield(self.stream, chat)
-                chat_date = row.get('time')
+                chat_date = chat.get('time')
             else:
                 chat_date = chat.get('ended_timestamp')
 
@@ -86,7 +92,7 @@ class Chats(Stream):
             if messages_stream.is_selected() and row.get('messages'):
                 yield from messages_stream.sync(chat)
 
-            curr_synced_thru = max(sync_thru, chat_date)
+            curr_synced_thru = max(curr_synced_thru, chat_date)
 
         # messages are returned in descending order
         self.update_bookmark(state, curr_synced_thru)
